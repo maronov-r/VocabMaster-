@@ -1,6 +1,6 @@
 // sw.js — offline app shell for VocabMaster.
 // Bump CACHE when app files change to invalidate old caches.
-const CACHE = 'vocabmaster-v2';
+const CACHE = 'vocabmaster-v3';
 const SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   './js/ocr.js',
   './js/parser.js',
   './js/dictionary.js',
+  './js/packs.js',
   './js/confetti.js',
   './manifest.webmanifest',
   './icons/icon.svg',
