@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#6B4EFF" />
+  <meta name="theme-color" content="#ECEAE0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="VocabMaster" />
   <title>VocabMaster</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="styles.css" />
@@ -20,34 +20,51 @@
   <div id="app">
     <!-- Top bar -->
     <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark">✦</span>
-        <span class="brand-name">Vocab<b>Master</b></span>
+      <button class="icon-btn" id="menuBtn" aria-label="Profile & backup">
+        <svg viewBox="0 0 24 24" class="ic"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>
+      </button>
+      <div class="progress-pill" id="progressPill">
+        <svg viewBox="0 0 24 24" class="ic sm"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        <span id="progressText">0/0</span>
+        <div class="pp-track"><div class="pp-bar" id="progressBar"></div></div>
       </div>
-      <div class="topbar-stats">
-        <button class="stat-pill streak" id="streakPill" title="Daily streak">
-          <span class="flame">🔥</span><span id="streakCount">0</span>
-        </button>
-        <button class="stat-pill" id="menuBtn" title="Backup & settings" aria-label="Menu">⋯</button>
-      </div>
+      <button class="icon-btn" id="statsBtn" aria-label="Streak">
+        <span class="mini-flame">🔥</span><span class="mini-streak" id="miniStreak">0</span>
+      </button>
     </header>
 
     <main id="main">
-      <!-- ===== REVIEW / SWIPE ===== -->
+      <!-- ===== SWIPE / REVIEW (home) ===== -->
       <section class="view" id="view-review" data-view="review">
-        <div class="view-head">
-          <h1 class="view-title">Swipe to learn</h1>
-          <p class="view-sub" id="reviewSub">Right if you know it, left to keep practicing.</p>
+        <!-- weekly streak strip -->
+        <div class="streak-strip" id="streakStrip">
+          <div class="ss-flame"><span>🔥</span><b id="ssCount">1</b></div>
+          <div class="ss-right">
+            <div class="ss-title" id="ssTitle">Day 1 of your learning streak</div>
+            <div class="ss-week" id="ssWeek"><!-- day dots injected --></div>
+          </div>
         </div>
+
         <div class="deck-area" id="deckArea"><!-- cards injected --></div>
+
         <div class="swipe-controls" id="swipeControls">
-          <button class="round-btn miss" id="btnMiss" aria-label="Still learning">✗</button>
-          <button class="round-btn flip" id="btnFlip" aria-label="Flip card">↺</button>
-          <button class="round-btn got" id="btnGot" aria-label="Got it">✓</button>
+          <button class="rank-btn struggling" id="btnMiss" aria-label="Struggling">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M7 7l10 10M17 7L7 17"/></svg>
+          </button>
+          <button class="rank-btn ghost" id="btnPron" aria-label="Pronounce">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8a5 5 0 010 8"/></svg>
+          </button>
+          <button class="rank-btn ghost" id="btnFav" aria-label="Favorite">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M12 20s-7-4.4-9.2-8.6C1 8 2.6 5 5.6 5c1.9 0 3.2 1.1 4.4 2.6C11.2 6.1 12.5 5 14.4 5c3 0 4.6 3 2.8 6.4C19 15.6 12 20 12 20z"/></svg>
+          </button>
+          <button class="rank-btn got" id="btnGot" aria-label="Got it">
+            <svg viewBox="0 0 24 24" class="ic"><path d="M5 13l4 4L19 7"/></svg>
+          </button>
         </div>
+
         <div class="empty-state hidden" id="reviewEmpty">
-          <div class="empty-emoji">🎉</div>
-          <h2>All caught up!</h2>
+          <div class="empty-emoji">✦</div>
+          <h2>All caught up</h2>
           <p>You've reviewed every card. Add more words or take a quiz.</p>
           <button class="btn primary" data-goto="upload">Add words</button>
         </div>
@@ -64,13 +81,14 @@
         </div>
         <div class="filter-chips" id="filterChips">
           <button class="chip active" data-filter="all">All</button>
-          <button class="chip" data-filter="new">✨ New</button>
-          <button class="chip" data-filter="learning">📚 Learning</button>
-          <button class="chip" data-filter="mastered">🏆 Mastered</button>
+          <button class="chip" data-filter="favorite">♥ Saved</button>
+          <button class="chip" data-filter="struggling">Struggling</button>
+          <button class="chip" data-filter="learning">Learning</button>
+          <button class="chip" data-filter="mastered">Locked in</button>
         </div>
         <div class="word-list" id="wordList"><!-- items injected --></div>
         <div class="empty-state hidden" id="libraryEmpty">
-          <div class="empty-emoji">📖</div>
+          <div class="empty-emoji">❦</div>
           <h2>No words yet</h2>
           <p>Upload a screenshot of highlighted words to start your collection.</p>
           <button class="btn primary" data-goto="upload">Upload a screenshot</button>
@@ -81,39 +99,41 @@
       <section class="view hidden" id="view-upload" data-view="upload">
         <div class="view-head">
           <h1 class="view-title">Add words</h1>
-          <p class="view-sub">Snap or upload a screenshot — we'll read the words for you.</p>
+          <p class="view-sub">Pick a screenshot or snap a photo — we'll read the words.</p>
         </div>
 
-        <!-- idle -->
         <div id="uploadIdle">
-          <label class="dropzone" id="dropzone">
-            <input type="file" id="fileInput" accept="image/*" capture="environment" hidden />
-            <div class="dropzone-emoji">📸</div>
-            <div class="dropzone-title">Take a photo or pick a screenshot</div>
-            <div class="dropzone-sub">Highlighted words, a glossary, or a word list</div>
+          <label class="dropzone" id="dzLibrary">
+            <input type="file" id="fileInput" accept="image/*" hidden />
+            <div class="dz-emoji">🖼️</div>
+            <div class="dz-title">Choose a screenshot</div>
+            <div class="dz-sub">From your photo library or files</div>
+          </label>
+          <label class="dropzone slim" id="dzCamera">
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden />
+            <div class="dz-emoji">📸</div>
+            <div class="dz-title">Take a photo</div>
           </label>
           <div class="or-line"><span>or add one by hand</span></div>
           <button class="btn ghost block" id="manualAddBtn">✍️ Type a word</button>
         </div>
 
-        <!-- processing -->
         <div id="uploadProcessing" class="hidden">
           <div class="processing-card">
             <div class="spinner"></div>
             <div class="processing-title" id="processingTitle">Reading your words…</div>
             <div class="progress"><div class="progress-bar" id="ocrProgress"></div></div>
-            <div class="processing-sub" id="processingSub">This can take a moment on the first run.</div>
+            <div class="processing-sub">This can take a moment on the first run.</div>
           </div>
         </div>
 
-        <!-- review found words -->
         <div id="uploadReview" class="hidden">
           <div class="review-head-row">
             <h2 class="section-title" id="foundTitle">Found words</h2>
             <button class="btn tiny" id="autoDefineBtn">✨ Auto-define</button>
           </div>
-          <p class="hint">Edit anything, delete what you don't want, then save.</p>
-          <div id="foundList" class="found-list"><!-- editable entries --></div>
+          <p class="hint">Edit anything, delete what you don't want, then save. Blank definitions get filled in automatically.</p>
+          <div id="foundList" class="found-list"></div>
           <button class="btn ghost block" id="addRowBtn">＋ Add another</button>
           <div class="sticky-actions">
             <button class="btn ghost" id="cancelReviewBtn">Cancel</button>
@@ -128,41 +148,31 @@
           <h1 class="view-title">Quiz yourself</h1>
           <p class="view-sub">Pick a mode and test your recall.</p>
         </div>
-
-        <!-- mode picker -->
         <div id="quizPicker">
           <button class="mode-card" data-mode="mc">
             <div class="mode-emoji">🎯</div>
-            <div class="mode-text">
-              <div class="mode-title">Multiple choice</div>
-              <div class="mode-sub">See a word, pick the meaning</div>
-            </div>
+            <div class="mode-text"><div class="mode-title">Multiple choice</div>
+              <div class="mode-sub">See a word, pick the meaning</div></div>
             <div class="mode-arrow">→</div>
           </button>
           <button class="mode-card" data-mode="type">
             <div class="mode-emoji">⌨️</div>
-            <div class="mode-text">
-              <div class="mode-title">Type the answer</div>
-              <div class="mode-sub">See the meaning, type the word</div>
-            </div>
+            <div class="mode-text"><div class="mode-title">Type the answer</div>
+              <div class="mode-sub">See the meaning, type the word</div></div>
             <div class="mode-arrow">→</div>
           </button>
           <div class="quiz-note" id="quizNote"></div>
         </div>
-
-        <!-- running quiz -->
         <div id="quizRun" class="hidden">
           <div class="quiz-progress-row">
             <div class="progress slim"><div class="progress-bar" id="quizProgress"></div></div>
             <div class="quiz-score" id="quizScore">0/0</div>
           </div>
-          <div id="quizQuestion"><!-- question injected --></div>
+          <div id="quizQuestion"></div>
         </div>
-
-        <!-- results -->
         <div id="quizResults" class="hidden">
           <div class="results-card">
-            <div class="results-emoji" id="resultsEmoji">🎉</div>
+            <div class="results-emoji" id="resultsEmoji">✦</div>
             <div class="results-score" id="resultsScore">0/0</div>
             <div class="results-title" id="resultsTitle">Nice work!</div>
             <div class="results-sub" id="resultsSub"></div>
@@ -175,11 +185,26 @@
 
     <!-- Bottom navigation -->
     <nav class="tabbar" id="tabbar">
-      <button class="tab active" data-view="review"><span class="tab-ico">🃏</span><span>Swipe</span></button>
-      <button class="tab" data-view="library"><span class="tab-ico">📚</span><span>Library</span></button>
-      <button class="tab upload-tab" data-view="upload"><span class="tab-ico">＋</span><span>Add</span></button>
-      <button class="tab" data-view="quiz"><span class="tab-ico">🎯</span><span>Quiz</span></button>
+      <button class="tab active" data-view="review" aria-label="Swipe">
+        <svg viewBox="0 0 24 24" class="ic"><rect x="4" y="5" width="16" height="14" rx="3"/><path d="M9 9h6M9 13h4"/></svg>
+      </button>
+      <button class="tab" data-view="library" aria-label="Library">
+        <svg viewBox="0 0 24 24" class="ic"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+      </button>
+      <button class="tab tab-add" data-view="upload" aria-label="Add">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="tab" data-view="quiz" aria-label="Quiz">
+        <svg viewBox="0 0 24 24" class="ic"><path d="M3 9l9-5 9 5-9 5z"/><path d="M7 11v5c0 1.4 2.2 2.5 5 2.5s5-1.1 5-2.5v-5"/></svg>
+      </button>
     </nav>
+  </div>
+
+  <!-- Word detail sheet -->
+  <div class="sheet-backdrop hidden" id="detailBackdrop"></div>
+  <div class="sheet detail-sheet hidden" id="detailSheet">
+    <div class="sheet-handle"></div>
+    <div id="detailBody"><!-- injected --></div>
   </div>
 
   <!-- Menu / backup sheet -->
@@ -196,7 +221,6 @@
     <button class="btn ghost block" id="closeSheetBtn">Close</button>
   </div>
 
-  <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
   <script type="module" src="app.js"></script>

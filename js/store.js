@@ -84,17 +84,41 @@ export async function deleteWord(id) {
   });
 }
 
+// Normalize a meanings array; build one from a single definition if needed.
+function normalizeMeanings(data) {
+  if (Array.isArray(data.meanings) && data.meanings.length) {
+    return data.meanings.map((m) => ({
+      partOfSpeech: (m.partOfSpeech || '').trim(),
+      definition: (m.definition || '').trim(),
+      example: (m.example || '').trim(),
+    }));
+  }
+  if ((data.definition || '').trim()) {
+    return [{
+      partOfSpeech: (data.partOfSpeech || '').trim(),
+      definition: (data.definition || '').trim(),
+      example: (data.example || '').trim(),
+    }];
+  }
+  return [];
+}
+
 // Create a normalized word record from partial data.
 export function makeWord(data) {
   const now = Date.now();
+  const meanings = normalizeMeanings(data);
+  const primary = meanings[0] || { definition: '', example: '', partOfSpeech: '' };
   return {
     id: uid(),
     word: (data.word || '').trim(),
-    definition: (data.definition || '').trim(),
-    example: (data.example || '').trim(),
+    meanings,                              // [{partOfSpeech, definition, example}]
+    definition: primary.definition,        // primary — used for search & quizzes
+    example: primary.example,
+    partOfSpeech: primary.partOfSpeech,
     phonetic: (data.phonetic || '').trim(),
-    partOfSpeech: (data.partOfSpeech || '').trim(),
-    status: 'new',       // new | learning | mastered
+    audio: (data.audio || '').trim(),
+    status: 'new',       // new | struggling | learning | mastered
+    favorite: !!data.favorite,
     correct: 0,          // total correct recalls
     wrong: 0,            // total misses
     streak: 0,           // consecutive correct
@@ -105,19 +129,44 @@ export function makeWord(data) {
   };
 }
 
-// Apply a review result and recompute mastery status.
+// Ensure an older record has the fields the current UI expects.
+export function upgradeWord(w) {
+  if (!Array.isArray(w.meanings) || !w.meanings.length) {
+    w.meanings = normalizeMeanings(w);
+  }
+  if (w.favorite === undefined) w.favorite = false;
+  const primary = w.meanings[0];
+  if (primary) {
+    w.definition = w.definition || primary.definition;
+    w.example = w.example || primary.example;
+    w.partOfSpeech = w.partOfSpeech || primary.partOfSpeech;
+  }
+  return w;
+}
+
+// Apply a swipe/quiz result and recompute mastery status.
+// gotIt = true  -> "I know it"  (progress toward mastered)
+// gotIt = false -> "struggling" (mark as hard)
 export function applyReview(word, gotIt) {
   word.seen = (word.seen || 0) + 1;
   if (gotIt) {
     word.correct = (word.correct || 0) + 1;
     word.streak = (word.streak || 0) + 1;
+    word.status = word.streak >= 3 ? 'mastered' : 'learning';
   } else {
     word.wrong = (word.wrong || 0) + 1;
     word.streak = 0;
+    word.status = 'struggling';
   }
-  if (word.seen === 0) word.status = 'new';
-  else if (word.streak >= 3) word.status = 'mastered';
-  else word.status = 'learning';
+  return word;
+}
+
+// Manually rank a word. rank: 'struggling' | 'learning' | 'mastered'.
+export function setRank(word, rank) {
+  word.status = rank;
+  if (rank === 'mastered') word.streak = Math.max(word.streak || 0, 3);
+  else if (rank === 'learning') word.streak = Math.min(word.streak || 0, 2) || 1;
+  else if (rank === 'struggling') word.streak = 0;
   return word;
 }
 
@@ -158,6 +207,14 @@ export async function touchStreak() {
   const today = dayStamp();
   const last = await getMeta('lastActiveDay', null);
   let streak = await getMeta('dayStreak', 0);
+
+  // Track which days had activity (keep the last ~40 for the week strip).
+  let active = await getMeta('activeDays', []);
+  if (!active.includes(today)) {
+    active = [...active, today].slice(-40);
+    await setMeta('activeDays', active);
+  }
+
   if (last === today) return streak;
   const yest = dayStamp(new Date(Date.now() - 86400000));
   streak = last === yest ? streak + 1 : 1;
@@ -165,6 +222,12 @@ export async function touchStreak() {
   await setMeta('dayStreak', streak);
   return streak;
 }
+
+export async function getActiveDays() {
+  return getMeta('activeDays', []);
+}
+
+export { dayStamp };
 
 export async function getStreak() {
   const today = dayStamp();
