@@ -23,7 +23,10 @@ const state = {
   play: null,
   pendingEntries: [],
   topicId: null,
+  explorer: null,
 };
+
+const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
 
 const STATUS = {
   new: { label: 'New', cls: '' },
@@ -119,8 +122,8 @@ async function toggleTopFav() {
   const mark = $('.flashcard.top .card-fav'); if (mark) mark.innerHTML = w.favorite ? HEART : '';
 }
 function buildReviewQueue() {
-  const rank = (w) => ({ struggling: 0, new: 1, learning: 2, mastered: 3 }[w.status] ?? 1);
-  return [...state.words].sort(() => Math.random() - 0.5).sort((a, b) => rank(a) - rank(b));
+  // Pure fresh shuffle every visit — no fixed order.
+  return shuffle(state.words);
 }
 function startReviewSession() { state.reviewQueue = buildReviewQueue(); state.sessionSize = state.reviewQueue.length; renderDeck(); }
 
@@ -179,12 +182,13 @@ function makeCard(w, isTop, depth) {
     <div class="stamp miss">STRUGGLING</div>`;
   const pill = card.querySelector('.phonetic-pill');
   pill.addEventListener('click', (e) => { e.stopPropagation(); pronounce(w.word); pill.classList.add('playing'); setTimeout(() => pill.classList.remove('playing'), 500); });
-  if (isTop) enableSwipe(card, w);
+  if (isTop) enableSwipe(card, resolveTop);
   return card;
 }
 
 // Smooth pointer-driven swipe: pointer capture + rAF-batched GPU transforms.
-function enableSwipe(card) {
+// onResolve(dir) is called when a card is flung off (dir = true for right).
+function enableSwipe(card, onResolve) {
   let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false, moved = false, raf = 0;
   const gotStamp = card.querySelector('.stamp.got'), missStamp = card.querySelector('.stamp.miss');
   const render = () => {
@@ -211,7 +215,7 @@ function enableSwipe(card) {
     if (!dragging) return;
     dragging = false; card.classList.remove('dragging');
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    if (Math.abs(dx) > 100) { resolveTop(dx > 0); }
+    if (Math.abs(dx) > 100) { onResolve(dx > 0); }
     else if (!moved) { card.classList.toggle('flipped'); card.style.transform = ''; resetStamps(card); }
     else { card.style.transform = ''; resetStamps(card); }
     dx = 0; dy = 0;
@@ -384,8 +388,15 @@ function paintEdit(w) {
 function wireExplore() {
   $('#topicBackdrop').addEventListener('click', closeTopic);
   $$('#quickTiles .tile').forEach((t) => t.addEventListener('click', () => onTile(t.dataset.tile)));
+  $('#exploreAllBtn').addEventListener('click', startExplorer);
+  $('#explorerBack').addEventListener('click', exitExplorer);
+  $('#exBtnSkip').addEventListener('click', () => exploreResolve(false));
+  $('#exBtnSave').addEventListener('click', () => exploreResolve(true));
+  $('#exBtnPron').addEventListener('click', () => { const pw = state.explorer && state.explorer.queue[0]; if (pw) pronounce(pw.word); });
 }
 function renderExplore() {
+  exitExplorer();
+  $('#eacSub').textContent = `Swipe through all ${allWords().length}, shuffled`;
   $('#tileFav').textContent = state.words.filter((w) => w.favorite).length;
   $('#tileMine').textContent = state.words.length;
   $('#tileHist').textContent = state.words.filter((w) => w.seen > 0).length;
@@ -452,6 +463,82 @@ function renderTopic(pack) {
 async function addPackWord(pw) {
   const rec = makeWord({ ...pw, source: 'pack' });
   await putWord(rec); state.words.push(rec);
+}
+
+// ---- All-words swipe explorer ----
+let ALL_WORDS = null;
+function allWords() {
+  if (!ALL_WORDS) {
+    const seen = new Set(); ALL_WORDS = [];
+    for (const p of PACKS) for (const wd of p.words) {
+      const k = wd.word.toLowerCase();
+      if (!seen.has(k)) { seen.add(k); ALL_WORDS.push(wd); }
+    }
+  }
+  return ALL_WORDS;
+}
+function startExplorer() {
+  state.explorer = { queue: shuffle(allWords()), size: allWords().length };
+  $('#exploreHome').classList.add('hidden');
+  $('#explorerMode').classList.remove('hidden');
+  renderExploreDeck();
+}
+function exitExplorer() {
+  state.explorer = null;
+  $('#explorerMode').classList.add('hidden');
+  $('#exploreHome').classList.remove('hidden');
+}
+function renderExploreDeck() {
+  const ex = state.explorer; if (!ex) return;
+  const area = $('#exploreDeck'); area.innerHTML = '';
+  const done = ex.size - ex.queue.length;
+  $('#explorerProgress').textContent = `${Math.min(done + 1, ex.size)} / ${ex.size}`;
+  const top3 = ex.queue.slice(0, 3).reverse();
+  top3.forEach((pw, i) => area.appendChild(makeExploreCard(pw, i === top3.length - 1, top3.length - 1 - i)));
+}
+function makeExploreCard(pw, isTop, depth) {
+  const saved = haveWord(pw.word);
+  const card = document.createElement('div');
+  card.className = 'flashcard' + (isTop ? ' top' : '');
+  card.style.setProperty('--depth', depth);
+  card.innerHTML = `
+    <div class="card-inner">
+      <div class="card-face card-front">
+        <div class="card-status ${saved ? 's-saved' : ''}">${saved ? '✓ In your list' : 'New word'}</div>
+        <div class="card-word">${escapeHTML(pw.word)}</div>
+        <div class="phonetic-pill" data-pron="1">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8a5 5 0 010 8"/></svg>
+          <span>${escapeHTML(pw.phonetic) || 'Tap to hear'}</span></div>
+        <div class="card-hint">tap card to flip</div>
+      </div>
+      <div class="card-face card-back"><div class="meanings">${meaningsHTML(pw)}</div>
+        <div class="card-hint">tap to flip back</div></div>
+    </div>
+    <div class="stamp got">SAVE</div>
+    <div class="stamp miss">SKIP</div>`;
+  const pill = card.querySelector('.phonetic-pill');
+  pill.addEventListener('click', (e) => { e.stopPropagation(); pronounce(pw.word); pill.classList.add('playing'); setTimeout(() => pill.classList.remove('playing'), 500); });
+  if (isTop) enableSwipe(card, exploreResolve);
+  return card;
+}
+async function exploreResolve(save) {
+  const ex = state.explorer; if (!ex || !ex.queue.length) return;
+  const pw = ex.queue[0];
+  const card = $('#exploreDeck .flashcard.top');
+  if (card) {
+    card.classList.add('flying');
+    const flyX = (save ? 1 : -1) * (innerWidth + 200);
+    card.style.transform = `translate3d(${flyX}px, 40px, 0) rotate(${save ? 18 : -18}deg)`;
+    const stamp = card.querySelector(save ? '.stamp.got' : '.stamp.miss'); if (stamp) stamp.style.opacity = 1;
+  }
+  if (save && !haveWord(pw.word)) {
+    await addPackWord(pw);
+    await touchStreak(); renderStreak();
+    toast(`Saved “${pw.word}” ✦`);
+  }
+  ex.queue.shift();
+  if (!ex.queue.length) ex.queue = shuffle(allWords()); // endless — reshuffle
+  setTimeout(renderExploreDeck, 230);
 }
 
 // ================= PRACTICE =================

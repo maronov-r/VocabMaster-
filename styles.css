@@ -393,6 +393,24 @@ body {
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* ===================== EXPLORE ===================== */
+.explore-all-card {
+  display: flex; align-items: center; gap: 12px; width: 100%; cursor: pointer; font-family: var(--sans);
+  text-align: left; background: var(--charcoal); color: #F3F1E8; border: none; border-radius: var(--radius);
+  padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow); transition: transform .12s var(--ease);
+}
+.explore-all-card:active { transform: scale(.99); }
+.eac-text { flex: 1; }
+.eac-title { font-family: var(--serif); font-weight: 500; font-size: 22px; }
+.eac-sub { font-size: 13px; font-weight: 500; color: #A9A597; margin-top: 2px; }
+.eac-emoji { font-size: 30px; }
+
+#explorerMode { flex: 1; display: flex; flex-direction: column; }
+#explorerMode .deck-area { flex: 1; }
+.explorer-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 4px; }
+.explorer-progress { font-weight: 700; font-size: 14px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.explorer-hint { text-align: center; color: var(--ink-faint); font-weight: 600; font-size: 12px; margin: 8px 0 0; }
+.card-status.s-saved { background: var(--sage-soft); color: var(--sage-deep); }
+
 .tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .tile {
   position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;

@@ -124,17 +124,41 @@
 
       <!-- ===== EXPLORE ===== -->
       <section class="view hidden" id="view-explore" data-view="explore">
-        <div class="view-head"><h1 class="view-title">Explore</h1>
-          <p class="view-sub">Discover new words and add them to your list.</p></div>
-        <div class="tile-grid" id="quickTiles">
-          <button class="tile" data-tile="favorite"><span class="tile-ico">♥</span><span class="tile-label">Favorites</span><span class="tile-count" id="tileFav">0</span></button>
-          <button class="tile" data-tile="mine"><span class="tile-ico">✍️</span><span class="tile-label">Your words</span><span class="tile-count" id="tileMine">0</span></button>
-          <button class="tile" data-tile="history"><span class="tile-ico">🕘</span><span class="tile-label">History</span><span class="tile-count" id="tileHist">0</span></button>
-          <button class="tile" data-tile="surprise"><span class="tile-ico">🎲</span><span class="tile-label">Surprise me</span><span class="tile-count">→</span></button>
+        <div id="exploreHome">
+          <div class="view-head"><h1 class="view-title">Explore</h1>
+            <p class="view-sub">Discover new words and add them to your list.</p></div>
+          <button class="explore-all-card" id="exploreAllBtn">
+            <div class="eac-text"><div class="eac-title">Explore all words</div>
+              <div class="eac-sub" id="eacSub">Swipe through every word, shuffled</div></div>
+            <span class="eac-emoji">🔀</span>
+          </button>
+          <div class="tile-grid" id="quickTiles">
+            <button class="tile" data-tile="favorite"><span class="tile-ico">♥</span><span class="tile-label">Favorites</span><span class="tile-count" id="tileFav">0</span></button>
+            <button class="tile" data-tile="mine"><span class="tile-ico">✍️</span><span class="tile-label">Your words</span><span class="tile-count" id="tileMine">0</span></button>
+            <button class="tile" data-tile="history"><span class="tile-ico">🕘</span><span class="tile-label">History</span><span class="tile-count" id="tileHist">0</span></button>
+            <button class="tile" data-tile="surprise"><span class="tile-ico">🎲</span><span class="tile-label">Surprise me</span><span class="tile-count">→</span></button>
+          </div>
+          <h2 class="section-title" style="margin-top:22px">Topics</h2>
+          <p class="hint">Curated packs — all free. Tap to browse and add.</p>
+          <div class="topic-grid" id="topicGrid"></div>
         </div>
-        <h2 class="section-title" style="margin-top:22px">Topics</h2>
-        <p class="hint">Curated packs — all free. Tap to browse and add.</p>
-        <div class="topic-grid" id="topicGrid"></div>
+
+        <div id="explorerMode" class="hidden">
+          <div class="explorer-head">
+            <button class="btn ghost tiny" id="explorerBack">← Done</button>
+            <span class="explorer-progress" id="explorerProgress">1 / 350</span>
+          </div>
+          <div class="deck-area" id="exploreDeck"></div>
+          <div class="swipe-controls">
+            <button class="rank-btn struggling" id="exBtnSkip" aria-label="Skip">
+              <svg viewBox="0 0 24 24" class="ic"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+            <button class="rank-btn ghost" id="exBtnPron" aria-label="Pronounce">
+              <svg viewBox="0 0 24 24" class="ic"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8a5 5 0 010 8"/></svg></button>
+            <button class="rank-btn got heart-btn" id="exBtnSave" aria-label="Save">
+              <svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21C12 21 4 14 4 8.7 4 6 6 4 8.6 4c1.5 0 2.8.7 3.4 1.9C12.6 4.7 13.9 4 15.4 4 18 4 20 6 20 8.7 20 14 12 21 12 21z"/></svg></button>
+          </div>
+          <p class="explorer-hint">Swipe right to save · left to skip · tap to flip</p>
+        </div>
       </section>
 
       <!-- ===== PRACTICE ===== -->
