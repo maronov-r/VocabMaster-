@@ -353,7 +353,7 @@ body {
   width: 100%; max-width: 520px; z-index: 60; background: var(--paper);
   border-radius: 26px 26px 0 0; padding: 12px 20px calc(20px + env(safe-area-inset-bottom));
   box-shadow: 0 -10px 40px rgba(0,0,0,.25); transition: transform .3s var(--ease);
-  max-height: 88vh; overflow-y: auto;
+  max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
 .sheet.up { transform: translate(-50%, 0); }
 .sheet-handle { width: 42px; height: 5px; border-radius: 999px; background: var(--line); margin: 4px auto 14px; }
@@ -404,12 +404,23 @@ body {
 .eac-sub { font-size: 13px; font-weight: 500; color: #A9A597; margin-top: 2px; }
 .eac-emoji { font-size: 30px; }
 
-#explorerMode { flex: 1; display: flex; flex-direction: column; }
-#explorerMode .deck-area { flex: 1; }
-.explorer-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 4px; }
-.explorer-progress { font-weight: 700; font-size: 14px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .explorer-hint { text-align: center; color: var(--ink-faint); font-weight: 600; font-size: 12px; margin: 8px 0 0; }
 .card-status.s-saved { background: var(--sage-soft); color: var(--sage-deep); }
+
+/* Learn scope bar (when swiping a specific topic) */
+.scope-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--sage-soft); border-radius: 999px; padding: 8px 8px 8px 16px; margin: 2px 0 4px;
+}
+.scope-txt { font-weight: 600; font-size: 14px; color: var(--sage-deep); }
+.scope-clear {
+  border: none; cursor: pointer; font-family: var(--sans); font-weight: 700; font-size: 13px;
+  background: var(--card); color: var(--ink); border-radius: 999px; padding: 7px 13px; box-shadow: var(--shadow-soft);
+}
+
+/* Lock the app behind an open sheet so only the sheet scrolls */
+body.modal-open { overflow: hidden; }
+body.modal-open #app { overflow: hidden; }
 
 .tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .tile {
@@ -439,8 +450,8 @@ body {
 .topic-emoji { font-size: 44px; }
 .topic-title { font-family: var(--serif); font-weight: 500; font-size: 28px; margin-top: 4px; }
 .topic-blurb { color: var(--ink-soft); font-weight: 500; font-size: 14px; margin-top: 4px; }
-.topic-actions { display: flex; gap: 10px; margin: 16px 0 10px; }
-.topic-actions .btn { flex: 1; }
+.topic-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 10px; }
+.topic-actions .btn { flex: 1 1 40%; }
 .pack-word { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
 .pack-word:last-child { border-bottom: none; }
 .pw-main { flex: 1; min-width: 0; }

@@ -23,7 +23,7 @@ const state = {
   play: null,
   pendingEntries: [],
   topicId: null,
-  explorer: null,
+  deckScope: null, // null = all words; {title, words} = a focused topic
 };
 
 const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
@@ -108,24 +108,45 @@ async function renderStreak() {
   $('#ssWeek').innerHTML = html;
 }
 
-// ================= REVIEW / SWIPE =================
+// ================= LEARN / SWIPE (all words) =================
 function wireReview() {
   $('#btnMiss').addEventListener('click', () => resolveTop(false));
   $('#btnGot').addEventListener('click', () => resolveTop(true));
   $('#btnPron').addEventListener('click', () => { const w = state.reviewQueue[0]; if (w) pronounce(w.word); });
   $('#btnFav').addEventListener('click', toggleTopFav);
+  $('#scopeClear').addEventListener('click', () => { state.deckScope = null; startReviewSession(); });
+}
+
+// The Learn deck draws from EVERY word in the app (built-in bank + your own),
+// deduped, unless a topic scope is active. Your saved list lives on the Words tab.
+function learnWords() {
+  if (state.deckScope) return state.deckScope.words;
+  const map = new Map();
+  for (const wd of state.words) map.set(wd.word.toLowerCase(), wd);        // your words win
+  for (const wd of allWords()) if (!map.has(wd.word.toLowerCase())) map.set(wd.word.toLowerCase(), wd);
+  return [...map.values()];
 }
 async function toggleTopFav() {
-  const w = state.reviewQueue[0]; if (!w) return;
+  let w = state.reviewQueue[0]; if (!w) return;
+  if (!haveWord(w.word)) { w = await addPackWord(w); state.reviewQueue[0] = w; }
   w.favorite = !w.favorite; await putWord(w);
   $('#btnFav').classList.toggle('on', w.favorite);
-  const mark = $('.flashcard.top .card-fav'); if (mark) mark.innerHTML = w.favorite ? HEART : '';
+  const card = $('.flashcard.top');
+  if (card) {
+    const mark = card.querySelector('.card-fav'); if (mark) mark.innerHTML = w.favorite ? HEART : '';
+    const tag = card.querySelector('.card-status'); if (tag) { tag.classList.add('s-saved'); tag.textContent = '✓ In your list'; }
+  }
 }
-function buildReviewQueue() {
-  // Pure fresh shuffle every visit — no fixed order.
-  return shuffle(state.words);
+function buildReviewQueue() { return shuffle(learnWords()); } // fresh shuffle every visit
+function startReviewSession() {
+  state.reviewQueue = buildReviewQueue();
+  state.sessionSize = state.reviewQueue.length;
+  const scoped = !!state.deckScope;
+  $('#scopeBar').classList.toggle('hidden', !scoped);
+  $('#streakStrip').style.display = scoped ? 'none' : '';
+  if (scoped) $('#scopeLabel').textContent = state.deckScope.title;
+  renderDeck();
 }
-function startReviewSession() { state.reviewQueue = buildReviewQueue(); state.sessionSize = state.reviewQueue.length; renderDeck(); }
 
 function meaningsHTML(w) {
   const list = (w.meanings && w.meanings.length) ? w.meanings
@@ -137,20 +158,21 @@ function meaningsHTML(w) {
 }
 
 function renderDeck() {
-  const area = $('#deckArea'), empty = $('#reviewEmpty'), controls = $('#swipeControls');
+  const area = $('#deckArea'), empty = $('#reviewEmpty'), controls = $('#swipeControls'), hint = $('#learnHint');
   area.innerHTML = ''; updateProgress();
-  if (!state.words.length || !state.reviewQueue.length) {
-    empty.classList.remove('hidden'); controls.style.visibility = 'hidden';
-    empty.querySelector('h2').textContent = state.words.length ? 'All caught up' : 'No cards yet';
-    empty.querySelector('p').textContent = state.words.length
-      ? "You've reviewed every card. Explore new words or take a quiz."
-      : 'Explore the built-in word packs or add a screenshot to build your deck.';
+  if (!state.reviewQueue.length) {
+    empty.classList.remove('hidden'); controls.style.visibility = 'hidden'; hint.style.visibility = 'hidden';
     return;
   }
-  empty.classList.add('hidden'); controls.style.visibility = 'visible';
+  empty.classList.add('hidden'); controls.style.visibility = 'visible'; hint.style.visibility = 'visible';
   const top3 = state.reviewQueue.slice(0, 3).reverse();
   top3.forEach((w, i) => area.appendChild(makeCard(w, i === top3.length - 1, top3.length - 1 - i)));
-  $('#btnFav').classList.toggle('on', !!state.reviewQueue[0].favorite);
+  refreshTopCardTag();
+}
+function refreshTopCardTag() {
+  const w = state.reviewQueue[0]; if (!w) return;
+  const rec = state.words.find((x) => x.word.toLowerCase() === w.word.toLowerCase());
+  $('#btnFav').classList.toggle('on', !!(rec && rec.favorite));
 }
 function updateProgress() {
   const total = state.sessionSize || 0, done = total - state.reviewQueue.length;
@@ -158,15 +180,16 @@ function updateProgress() {
   $('#progressBar').style.width = total ? (done / total * 100) + '%' : '0%';
 }
 function makeCard(w, isTop, depth) {
-  const st = STATUS[w.status] || STATUS.new;
+  const rec = state.words.find((x) => x.word.toLowerCase() === w.word.toLowerCase());
+  const saved = !!rec;
   const card = document.createElement('div');
   card.className = 'flashcard' + (isTop ? ' top' : '');
   card.style.setProperty('--depth', depth);
   card.innerHTML = `
     <div class="card-inner">
       <div class="card-face card-front">
-        <div class="card-status ${st.cls}">${st.label}</div>
-        <div class="card-fav">${w.favorite ? HEART : ''}</div>
+        <div class="card-status ${saved ? 's-saved' : ''}">${saved ? '✓ In your list' : 'New word'}</div>
+        <div class="card-fav">${saved && rec.favorite ? HEART : ''}</div>
         <div class="card-word">${escapeHTML(w.word)}</div>
         <div class="phonetic-pill" data-pron="1">
           <svg viewBox="0 0 24 24" class="ic"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8a5 5 0 010 8"/></svg>
@@ -178,8 +201,8 @@ function makeCard(w, isTop, depth) {
         <div class="card-hint">tap to flip back</div>
       </div>
     </div>
-    <div class="stamp got">KNOW IT</div>
-    <div class="stamp miss">STRUGGLING</div>`;
+    <div class="stamp got">SAVE</div>
+    <div class="stamp miss">SKIP</div>`;
   const pill = card.querySelector('.phonetic-pill');
   pill.addEventListener('click', (e) => { e.stopPropagation(); pronounce(w.word); pill.classList.add('playing'); setTimeout(() => pill.classList.remove('playing'), 500); });
   if (isTop) enableSwipe(card, resolveTop);
@@ -229,20 +252,24 @@ function resetStamps(card) {
   const g = card.querySelector('.stamp.got'), m = card.querySelector('.stamp.miss');
   if (g) g.style.opacity = 0; if (m) m.style.opacity = 0;
 }
-async function resolveTop(gotIt) {
+// Right = save to your list, left = skip. (Your list lives on the Words tab.)
+async function resolveTop(save) {
   const w = state.reviewQueue[0]; if (!w) return;
   const card = $('.flashcard.top');
   if (card) {
     card.classList.add('flying');
-    const flyX = (gotIt ? 1 : -1) * (innerWidth + 200);
-    card.style.transform = `translate3d(${flyX}px, 40px, 0) rotate(${gotIt ? 18 : -18}deg)`;
-    const stamp = card.querySelector(gotIt ? '.stamp.got' : '.stamp.miss'); if (stamp) stamp.style.opacity = 1;
+    const flyX = (save ? 1 : -1) * (innerWidth + 200);
+    card.style.transform = `translate3d(${flyX}px, 40px, 0) rotate(${save ? 18 : -18}deg)`;
+    const stamp = card.querySelector(save ? '.stamp.got' : '.stamp.miss'); if (stamp) stamp.style.opacity = 1;
   }
-  const justMastered = gotIt && w.streak === 2;
-  applyReview(w, gotIt); await putWord(w);
-  await touchStreak(); renderStreak();
+  if (save && !haveWord(w.word)) {
+    await addPackWord(w);
+    await touchStreak(); renderStreak();
+    toast(`Saved “${w.word}” ✦`);
+  }
   state.reviewQueue.shift();
-  setTimeout(() => { renderDeck(); if (justMastered) toast(`✦ “${w.word}” locked in`); }, 230);
+  if (!state.reviewQueue.length) { state.reviewQueue = buildReviewQueue(); state.sessionSize = state.reviewQueue.length; }
+  setTimeout(renderDeck, 230);
 }
 
 // ================= LIBRARY =================
@@ -285,10 +312,13 @@ function wireDetail() { $('#detailBackdrop').addEventListener('click', closeDeta
 function openDetail(id) {
   const w = state.words.find((x) => x.id === id); if (!w) return;
   renderDetail(w, false);
+  document.body.classList.add('modal-open');
   $('#detailBackdrop').classList.remove('hidden'); $('#detailSheet').classList.remove('hidden');
+  $('#detailSheet').scrollTop = 0;
   requestAnimationFrame(() => $('#detailSheet').classList.add('up'));
 }
 function closeDetail() {
+  document.body.classList.remove('modal-open');
   $('#detailSheet').classList.remove('up'); $('#detailBackdrop').classList.add('hidden');
   setTimeout(() => $('#detailSheet').classList.add('hidden'), 250);
 }
@@ -388,15 +418,8 @@ function paintEdit(w) {
 function wireExplore() {
   $('#topicBackdrop').addEventListener('click', closeTopic);
   $$('#quickTiles .tile').forEach((t) => t.addEventListener('click', () => onTile(t.dataset.tile)));
-  $('#exploreAllBtn').addEventListener('click', startExplorer);
-  $('#explorerBack').addEventListener('click', exitExplorer);
-  $('#exBtnSkip').addEventListener('click', () => exploreResolve(false));
-  $('#exBtnSave').addEventListener('click', () => exploreResolve(true));
-  $('#exBtnPron').addEventListener('click', () => { const pw = state.explorer && state.explorer.queue[0]; if (pw) pronounce(pw.word); });
 }
 function renderExplore() {
-  exitExplorer();
-  $('#eacSub').textContent = `Swipe through all ${allWords().length}, shuffled`;
   $('#tileFav').textContent = state.words.filter((w) => w.favorite).length;
   $('#tileMine').textContent = state.words.length;
   $('#tileHist').textContent = state.words.filter((w) => w.seen > 0).length;
@@ -420,10 +443,13 @@ function openTopic(id) {
   const pack = getPack(id); if (!pack) return;
   state.topicId = id;
   renderTopic(pack);
+  document.body.classList.add('modal-open');
   $('#topicBackdrop').classList.remove('hidden'); $('#topicSheet').classList.remove('hidden');
+  $('#topicSheet').scrollTop = 0;
   requestAnimationFrame(() => $('#topicSheet').classList.add('up'));
 }
 function closeTopic() {
+  document.body.classList.remove('modal-open');
   $('#topicSheet').classList.remove('up'); $('#topicBackdrop').classList.add('hidden');
   setTimeout(() => $('#topicSheet').classList.add('hidden'), 250);
 }
@@ -436,7 +462,9 @@ function renderTopic(pack) {
       <div class="topic-title">${escapeHTML(pack.title)}</div>
       <div class="topic-blurb">${escapeHTML(pack.blurb)}</div></div>
     <div class="topic-actions">
-      <button class="btn primary" id="addAll" ${remaining ? '' : 'disabled'}>${remaining ? `Add all ${remaining}` : 'All added ✓'}</button>
+      <button class="btn primary" id="topicSwipe">🃏 Swipe these</button>
+      <button class="btn ghost" id="topicQuiz">🎯 Quiz these</button>
+      <button class="btn ghost" id="addAll" ${remaining ? '' : 'disabled'}>${remaining ? `Add all ${remaining}` : 'All added ✓'}</button>
       <button class="btn ghost" id="topicClose">Close</button>
     </div>
     <div>${pack.words.map((pw, i) => {
@@ -448,6 +476,14 @@ function renderTopic(pack) {
         <button class="pw-add ${added ? 'added' : ''}" data-i="${i}">${added ? '✓' : '＋'}</button></div>`;
     }).join('')}</div>`;
   $('#topicClose').addEventListener('click', closeTopic);
+  $('#topicSwipe').addEventListener('click', () => {
+    state.deckScope = { title: pack.title, words: pack.words.slice() };
+    closeTopic(); switchView('review');
+  });
+  $('#topicQuiz').addEventListener('click', () => {
+    const pool = packPool(pack);
+    closeTopic(); switchView('practice'); startPlay('mc', pool);
+  });
   $('#addAll').addEventListener('click', async () => {
     let n = 0; for (const pw of pack.words) if (!haveWord(pw.word)) { await addPackWord(pw); n++; }
     renderTopic(pack); toast(`Added ${n} word${n === 1 ? '' : 's'} to your list ✦`);
@@ -463,9 +499,10 @@ function renderTopic(pack) {
 async function addPackWord(pw) {
   const rec = makeWord({ ...pw, source: 'pack' });
   await putWord(rec); state.words.push(rec);
+  return rec;
 }
 
-// ---- All-words swipe explorer ----
+// Every unique word in the app (built-in bank), memoized.
 let ALL_WORDS = null;
 function allWords() {
   if (!ALL_WORDS) {
@@ -477,79 +514,24 @@ function allWords() {
   }
   return ALL_WORDS;
 }
-function startExplorer() {
-  state.explorer = { queue: shuffle(allWords()), size: allWords().length };
-  $('#exploreHome').classList.add('hidden');
-  $('#explorerMode').classList.remove('hidden');
-  renderExploreDeck();
-}
-function exitExplorer() {
-  state.explorer = null;
-  $('#explorerMode').classList.add('hidden');
-  $('#exploreHome').classList.remove('hidden');
-}
-function renderExploreDeck() {
-  const ex = state.explorer; if (!ex) return;
-  const area = $('#exploreDeck'); area.innerHTML = '';
-  const done = ex.size - ex.queue.length;
-  $('#explorerProgress').textContent = `${Math.min(done + 1, ex.size)} / ${ex.size}`;
-  const top3 = ex.queue.slice(0, 3).reverse();
-  top3.forEach((pw, i) => area.appendChild(makeExploreCard(pw, i === top3.length - 1, top3.length - 1 - i)));
-}
-function makeExploreCard(pw, isTop, depth) {
-  const saved = haveWord(pw.word);
-  const card = document.createElement('div');
-  card.className = 'flashcard' + (isTop ? ' top' : '');
-  card.style.setProperty('--depth', depth);
-  card.innerHTML = `
-    <div class="card-inner">
-      <div class="card-face card-front">
-        <div class="card-status ${saved ? 's-saved' : ''}">${saved ? '✓ In your list' : 'New word'}</div>
-        <div class="card-word">${escapeHTML(pw.word)}</div>
-        <div class="phonetic-pill" data-pron="1">
-          <svg viewBox="0 0 24 24" class="ic"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8a5 5 0 010 8"/></svg>
-          <span>${escapeHTML(pw.phonetic) || 'Tap to hear'}</span></div>
-        <div class="card-hint">tap card to flip</div>
-      </div>
-      <div class="card-face card-back"><div class="meanings">${meaningsHTML(pw)}</div>
-        <div class="card-hint">tap to flip back</div></div>
-    </div>
-    <div class="stamp got">SAVE</div>
-    <div class="stamp miss">SKIP</div>`;
-  const pill = card.querySelector('.phonetic-pill');
-  pill.addEventListener('click', (e) => { e.stopPropagation(); pronounce(pw.word); pill.classList.add('playing'); setTimeout(() => pill.classList.remove('playing'), 500); });
-  if (isTop) enableSwipe(card, exploreResolve);
-  return card;
-}
-async function exploreResolve(save) {
-  const ex = state.explorer; if (!ex || !ex.queue.length) return;
-  const pw = ex.queue[0];
-  const card = $('#exploreDeck .flashcard.top');
-  if (card) {
-    card.classList.add('flying');
-    const flyX = (save ? 1 : -1) * (innerWidth + 200);
-    card.style.transform = `translate3d(${flyX}px, 40px, 0) rotate(${save ? 18 : -18}deg)`;
-    const stamp = card.querySelector(save ? '.stamp.got' : '.stamp.miss'); if (stamp) stamp.style.opacity = 1;
-  }
-  if (save && !haveWord(pw.word)) {
-    await addPackWord(pw);
-    await touchStreak(); renderStreak();
-    toast(`Saved “${pw.word}” ✦`);
-  }
-  ex.queue.shift();
-  if (!ex.queue.length) ex.queue = shuffle(allWords()); // endless — reshuffle
-  setTimeout(renderExploreDeck, 230);
-}
 
 // ================= PRACTICE =================
 function wirePractice() {
   $$('#challengeGrid .challenge-card').forEach((c) => c.addEventListener('click', () => startPlay(c.dataset.mode)));
   $$('#practiceHome .mode-card').forEach((c) => c.addEventListener('click', () => startPlay(c.dataset.mode)));
-  $('#quizAgainBtn').addEventListener('click', () => startPlay(state.play ? state.play.mode : 'mc'));
+  $('#quizAgainBtn').addEventListener('click', () => startPlay(state.play ? state.play.mode : 'mc', state.play ? state.play.pool : null));
   $('#quizDoneBtn').addEventListener('click', resetPractice);
   $('#quizQuit').addEventListener('click', quitPlay);
 }
 function poolReady() { return state.words.filter((w) => w.definition).length; }
+function defaultPool() { return state.words.filter((w) => w.definition); }
+// Turn a pack's words into quiz-ready objects (synthetic ids; not saved).
+function packPool(pack) {
+  return pack.words.map((pw, i) => {
+    const md = pw.meanings[0] || {};
+    return { id: 'pk_' + i + '_' + pw.word, word: pw.word, definition: md.definition || '', partOfSpeech: md.partOfSpeech || '' };
+  }).filter((x) => x.definition);
+}
 function resetPractice() {
   stopTimer();
   $('#practiceHome').classList.remove('hidden');
@@ -568,22 +550,21 @@ function makeQuestion(w, type, pool) {
   }
   return { word: w, type: 'type', answer: w.word };
 }
-function buildQuestions(type, count) {
-  const pool = state.words.filter((w) => w.definition);
+function buildQuestions(type, count, pool) {
   const out = []; if (!pool.length) return out;
   while (out.length < count) {
-    const sh = [...pool].sort(() => Math.random() - 0.5);
+    const sh = shuffle(pool);
     for (const w of sh) { if (out.length >= count) break; out.push(makeQuestion(w, type, pool)); }
     if (pool.length < 2) break;
   }
   return out;
 }
-function startPlay(mode) {
+function startPlay(mode, poolWords) {
   const cfg = PLAY[mode]; if (!cfg) return;
-  const pool = poolReady();
-  if (pool < 4) { toast('Add at least 4 words with definitions first.'); return; }
-  const total = (mode === 'mc' || mode === 'type') ? Math.min(cfg.total, pool) : cfg.total;
-  state.play = { mode, cfg, questions: buildQuestions(cfg.type, total), index: 0, score: 0, lives: cfg.lives, time: cfg.time, over: false };
+  const pool = (poolWords && poolWords.length) ? poolWords : defaultPool();
+  if (pool.length < 4) { toast('Need at least 4 words with definitions to play.'); return; }
+  const total = (mode === 'mc' || mode === 'type') ? Math.min(cfg.total, pool.length) : cfg.total;
+  state.play = { mode, cfg, pool, questions: buildQuestions(cfg.type, total, pool), index: 0, score: 0, lives: cfg.lives, time: cfg.time, over: false };
   $('#practiceHome').classList.add('hidden'); $('#quizResults').classList.add('hidden'); $('#quizRun').classList.remove('hidden');
   updatePlayHeader(); updateProgressRow(); renderQuestion();
   if (cfg.time) startTimer();
@@ -636,8 +617,9 @@ async function grade(word, correct) {
   const p = state.play;
   if (correct) p.score++;
   else if (p.cfg.lives && !p.cfg.stopOnWrong) p.lives--;
-  applyReview(word, correct); await putWord(word);
-  const idx = state.words.findIndex((w) => w.id === word.id); if (idx >= 0) state.words[idx] = word;
+  // Only record mastery for words that are actually in your list (skip topic-quiz pool words).
+  const rec = state.words.find((w) => w.id === word.id);
+  if (rec) { applyReview(rec, correct); await putWord(rec); }
   updatePlayHeader(); updateProgressRow();
   setTimeout(() => {
     if (p.over) return;
@@ -692,8 +674,8 @@ function wireMenu() {
   $('#importInput').addEventListener('change', doImport);
   $('#wipeBtn').addEventListener('click', doWipe);
 }
-function openSheet() { $('#sheetBackdrop').classList.remove('hidden'); $('#menuSheet').classList.remove('hidden'); requestAnimationFrame(() => $('#menuSheet').classList.add('up')); updateStorageNote(); }
-function closeSheet() { $('#menuSheet').classList.remove('up'); $('#sheetBackdrop').classList.add('hidden'); setTimeout(() => $('#menuSheet').classList.add('hidden'), 250); }
+function openSheet() { document.body.classList.add('modal-open'); $('#sheetBackdrop').classList.remove('hidden'); $('#menuSheet').classList.remove('hidden'); requestAnimationFrame(() => $('#menuSheet').classList.add('up')); updateStorageNote(); }
+function closeSheet() { document.body.classList.remove('modal-open'); $('#menuSheet').classList.remove('up'); $('#sheetBackdrop').classList.add('hidden'); setTimeout(() => $('#menuSheet').classList.add('hidden'), 250); }
 async function updateStorageNote() {
   let persisted = false; try { persisted = await navigator.storage.persisted(); } catch (_) {}
   $('#storageNote').textContent = `${state.words.length} words saved on this device` + (persisted ? ' · storage protected ✓' : '');
