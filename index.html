@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#6B4EFF" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VocabMaster" />
+  <title>VocabMaster</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">✦</span>
+        <span class="brand-name">Vocab<b>Master</b></span>
+      </div>
+      <div class="topbar-stats">
+        <button class="stat-pill streak" id="streakPill" title="Daily streak">
+          <span class="flame">🔥</span><span id="streakCount">0</span>
+        </button>
+        <button class="stat-pill" id="menuBtn" title="Backup & settings" aria-label="Menu">⋯</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ===== REVIEW / SWIPE ===== -->
+      <section class="view" id="view-review" data-view="review">
+        <div class="view-head">
+          <h1 class="view-title">Swipe to learn</h1>
+          <p class="view-sub" id="reviewSub">Right if you know it, left to keep practicing.</p>
+        </div>
+        <div class="deck-area" id="deckArea"><!-- cards injected --></div>
+        <div class="swipe-controls" id="swipeControls">
+          <button class="round-btn miss" id="btnMiss" aria-label="Still learning">✗</button>
+          <button class="round-btn flip" id="btnFlip" aria-label="Flip card">↺</button>
+          <button class="round-btn got" id="btnGot" aria-label="Got it">✓</button>
+        </div>
+        <div class="empty-state hidden" id="reviewEmpty">
+          <div class="empty-emoji">🎉</div>
+          <h2>All caught up!</h2>
+          <p>You've reviewed every card. Add more words or take a quiz.</p>
+          <button class="btn primary" data-goto="upload">Add words</button>
+        </div>
+      </section>
+
+      <!-- ===== LIBRARY ===== -->
+      <section class="view hidden" id="view-library" data-view="library">
+        <div class="view-head">
+          <h1 class="view-title">Your words</h1>
+          <p class="view-sub" id="libraryCount">0 words</p>
+        </div>
+        <div class="search-row">
+          <input type="search" id="searchInput" class="search-input" placeholder="Search words…" />
+        </div>
+        <div class="filter-chips" id="filterChips">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="new">✨ New</button>
+          <button class="chip" data-filter="learning">📚 Learning</button>
+          <button class="chip" data-filter="mastered">🏆 Mastered</button>
+        </div>
+        <div class="word-list" id="wordList"><!-- items injected --></div>
+        <div class="empty-state hidden" id="libraryEmpty">
+          <div class="empty-emoji">📖</div>
+          <h2>No words yet</h2>
+          <p>Upload a screenshot of highlighted words to start your collection.</p>
+          <button class="btn primary" data-goto="upload">Upload a screenshot</button>
+        </div>
+      </section>
+
+      <!-- ===== UPLOAD ===== -->
+      <section class="view hidden" id="view-upload" data-view="upload">
+        <div class="view-head">
+          <h1 class="view-title">Add words</h1>
+          <p class="view-sub">Snap or upload a screenshot — we'll read the words for you.</p>
+        </div>
+
+        <!-- idle -->
+        <div id="uploadIdle">
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="fileInput" accept="image/*" capture="environment" hidden />
+            <div class="dropzone-emoji">📸</div>
+            <div class="dropzone-title">Take a photo or pick a screenshot</div>
+            <div class="dropzone-sub">Highlighted words, a glossary, or a word list</div>
+          </label>
+          <div class="or-line"><span>or add one by hand</span></div>
+          <button class="btn ghost block" id="manualAddBtn">✍️ Type a word</button>
+        </div>
+
+        <!-- processing -->
+        <div id="uploadProcessing" class="hidden">
+          <div class="processing-card">
+            <div class="spinner"></div>
+            <div class="processing-title" id="processingTitle">Reading your words…</div>
+            <div class="progress"><div class="progress-bar" id="ocrProgress"></div></div>
+            <div class="processing-sub" id="processingSub">This can take a moment on the first run.</div>
+          </div>
+        </div>
+
+        <!-- review found words -->
+        <div id="uploadReview" class="hidden">
+          <div class="review-head-row">
+            <h2 class="section-title" id="foundTitle">Found words</h2>
+            <button class="btn tiny" id="autoDefineBtn">✨ Auto-define</button>
+          </div>
+          <p class="hint">Edit anything, delete what you don't want, then save.</p>
+          <div id="foundList" class="found-list"><!-- editable entries --></div>
+          <button class="btn ghost block" id="addRowBtn">＋ Add another</button>
+          <div class="sticky-actions">
+            <button class="btn ghost" id="cancelReviewBtn">Cancel</button>
+            <button class="btn primary" id="saveWordsBtn">Save words</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== QUIZ ===== -->
+      <section class="view hidden" id="view-quiz" data-view="quiz">
+        <div class="view-head">
+          <h1 class="view-title">Quiz yourself</h1>
+          <p class="view-sub">Pick a mode and test your recall.</p>
+        </div>
+
+        <!-- mode picker -->
+        <div id="quizPicker">
+          <button class="mode-card" data-mode="mc">
+            <div class="mode-emoji">🎯</div>
+            <div class="mode-text">
+              <div class="mode-title">Multiple choice</div>
+              <div class="mode-sub">See a word, pick the meaning</div>
+            </div>
+            <div class="mode-arrow">→</div>
+          </button>
+          <button class="mode-card" data-mode="type">
+            <div class="mode-emoji">⌨️</div>
+            <div class="mode-text">
+              <div class="mode-title">Type the answer</div>
+              <div class="mode-sub">See the meaning, type the word</div>
+            </div>
+            <div class="mode-arrow">→</div>
+          </button>
+          <div class="quiz-note" id="quizNote"></div>
+        </div>
+
+        <!-- running quiz -->
+        <div id="quizRun" class="hidden">
+          <div class="quiz-progress-row">
+            <div class="progress slim"><div class="progress-bar" id="quizProgress"></div></div>
+            <div class="quiz-score" id="quizScore">0/0</div>
+          </div>
+          <div id="quizQuestion"><!-- question injected --></div>
+        </div>
+
+        <!-- results -->
+        <div id="quizResults" class="hidden">
+          <div class="results-card">
+            <div class="results-emoji" id="resultsEmoji">🎉</div>
+            <div class="results-score" id="resultsScore">0/0</div>
+            <div class="results-title" id="resultsTitle">Nice work!</div>
+            <div class="results-sub" id="resultsSub"></div>
+            <button class="btn primary block" id="quizAgainBtn">Play again</button>
+            <button class="btn ghost block" data-goto="review">Back to swiping</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom navigation -->
+    <nav class="tabbar" id="tabbar">
+      <button class="tab active" data-view="review"><span class="tab-ico">🃏</span><span>Swipe</span></button>
+      <button class="tab" data-view="library"><span class="tab-ico">📚</span><span>Library</span></button>
+      <button class="tab upload-tab" data-view="upload"><span class="tab-ico">＋</span><span>Add</span></button>
+      <button class="tab" data-view="quiz"><span class="tab-ico">🎯</span><span>Quiz</span></button>
+    </nav>
+  </div>
+
+  <!-- Menu / backup sheet -->
+  <div class="sheet-backdrop hidden" id="sheetBackdrop"></div>
+  <div class="sheet hidden" id="menuSheet">
+    <div class="sheet-handle"></div>
+    <h2 class="sheet-title">Backup &amp; settings</h2>
+    <button class="sheet-row" id="exportBtn"><span>⬇️</span> Export my words (backup)</button>
+    <label class="sheet-row" for="importInput"><span>⬆️</span> Import from a backup file
+      <input type="file" id="importInput" accept="application/json,.json" hidden /></label>
+    <button class="sheet-row" id="shareBtn"><span>📤</span> Share / save backup</button>
+    <div class="sheet-note" id="storageNote"></div>
+    <button class="sheet-row danger" id="wipeBtn"><span>🗑️</span> Delete everything</button>
+    <button class="btn ghost block" id="closeSheetBtn">Close</button>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
