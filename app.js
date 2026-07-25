@@ -3,6 +3,7 @@ import {
   getAllWords, putWord, deleteWord, makeWord, applyReview, setRank, upgradeWord,
   findByWord, requestPersistence, getStreak, touchStreak, getActiveDays, dayStamp,
   exportAll, importAll,
+  getFolders, addFolder, renameFolder, deleteFolder,
 } from './js/store.js';
 import { recognize } from './js/ocr.js';
 import { parseText } from './js/parser.js';
@@ -19,7 +20,8 @@ const state = {
   view: 'review',
   reviewQueue: [],
   sessionSize: 0,
-  library: { search: '', filter: 'all' },
+  library: { search: '', filter: 'all', folder: null },
+  folders: [],
   play: null,
   pendingEntries: [],
   topicId: null,
@@ -48,9 +50,10 @@ async function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   requestPersistence();
   state.words = (await getAllWords()).map(upgradeWord);
+  state.folders = await getFolders();
   await renderStreak();
   wireNav(); wireReview(); wireLibrary(); wireUpload();
-  wirePractice(); wireExplore(); wireMenu(); wireDetail();
+  wirePractice(); wireExplore(); wireMenu(); wireDetail(); wirePicker();
   switchView('review');
 }
 
@@ -280,12 +283,131 @@ function wireLibrary() {
     $$('#filterChips .chip').forEach((c) => c.classList.toggle('active', c === chip));
     renderLibrary();
   }));
+  $('#folderSwipe').addEventListener('click', () => {
+    const words = folderWords(state.library.folder);
+    if (!words.length) { toast('This folder is empty.'); return; }
+    state.deckScope = { title: folderName(state.library.folder), words };
+    switchView('review');
+  });
+  $('#folderQuiz').addEventListener('click', () => {
+    const pool = folderWords(state.library.folder).filter((w) => w.definition);
+    if (pool.length < 4) { toast('Need at least 4 words with definitions in this folder.'); return; }
+    switchView('practice'); startPlay('mc', pool);
+  });
+  $('#folderEdit').addEventListener('click', editCurrentFolder);
+}
+
+// ---- folder picker sheet (used when adding a whole pack) ----
+let pickerResolve = null;
+function syncModalLock() {
+  const open = ['#topicSheet', '#detailSheet', '#menuSheet', '#pickerSheet']
+    .some((s) => $(s) && !$(s).classList.contains('hidden'));
+  document.body.classList.toggle('modal-open', open);
+}
+function openFolderPicker({ title, hint }) {
+  return new Promise((resolve) => {
+    pickerResolve = resolve;
+    $('#pickerTitle').textContent = title;
+    $('#pickerHint').textContent = hint || '';
+    renderPickerList();
+    $('#pickerBackdrop').classList.remove('hidden');
+    $('#pickerSheet').classList.remove('hidden');
+    $('#pickerSheet').scrollTop = 0;
+    syncModalLock();
+    requestAnimationFrame(() => $('#pickerSheet').classList.add('up'));
+  });
+}
+function closePicker(result) {
+  $('#pickerSheet').classList.remove('up');
+  $('#pickerBackdrop').classList.add('hidden');
+  setTimeout(() => { $('#pickerSheet').classList.add('hidden'); syncModalLock(); }, 250);
+  const r = pickerResolve; pickerResolve = null;
+  if (r) r(result);
+}
+function renderPickerList() {
+  const list = $('#pickerList');
+  list.innerHTML = state.folders.length
+    ? state.folders.map((f) => `<button class="picker-row" data-pick="${f.id}">📁 ${escapeHTML(f.name)}
+        <span class="pr-check">${folderWords(f.id).length}</span></button>`).join('')
+    : `<p class="hint" style="text-align:center">No folders yet — create one below.</p>`;
+  $$('#pickerList .picker-row').forEach((b) => b.addEventListener('click', () => closePicker(b.dataset.pick)));
+}
+function wirePicker() {
+  $('#pickerBackdrop').addEventListener('click', () => closePicker(null));
+  $('#pickerSkip').addEventListener('click', () => closePicker(null));
+  $('#pickerNew').addEventListener('click', async () => {
+    const f = await createFolderPrompt();
+    if (f) closePicker(f.id); else renderPickerList();
+  });
+}
+
+// ---- folders ----
+function folderName(id) {
+  const f = state.folders.find((x) => x.id === id);
+  return f ? f.name : '';
+}
+function folderWords(id) {
+  return state.words.filter((w) => (w.folders || []).includes(id));
+}
+function renderFolderRow() {
+  const row = $('#folderRow');
+  const sel = state.library.folder;
+  row.innerHTML = `<button class="folder-chip ${!sel ? 'active' : ''}" data-folder="">All words
+      <span class="fc-count">${state.words.length}</span></button>` +
+    state.folders.map((f) => `<button class="folder-chip ${sel === f.id ? 'active' : ''}" data-folder="${f.id}">📁 ${escapeHTML(f.name)}
+      <span class="fc-count">${folderWords(f.id).length}</span></button>`).join('') +
+    `<button class="folder-chip new" id="newFolderChip">＋ New folder</button>`;
+
+  $$('#folderRow .folder-chip[data-folder]').forEach((c) => c.addEventListener('click', () => {
+    state.library.folder = c.dataset.folder || null;
+    renderLibrary();
+  }));
+  $('#newFolderChip').addEventListener('click', createFolderPrompt);
+  $('#folderActions').classList.toggle('hidden', !sel);
+}
+async function createFolderPrompt() {
+  const name = prompt('Name this folder:', '');
+  if (name === null) return null;
+  if (!name.trim()) { toast('Give the folder a name.'); return null; }
+  const f = await addFolder(name);
+  state.folders = await getFolders();
+  renderLibrary();
+  toast(`Folder “${f.name}” created`);
+  return f;
+}
+async function editCurrentFolder() {
+  const id = state.library.folder; if (!id) return;
+  const current = folderName(id);
+  const name = prompt('Rename folder (or clear the text and press OK to delete it):', current);
+  if (name === null) return;
+  if (!name.trim()) {
+    if (!confirm(`Delete the folder “${current}”? Your words are kept, only the folder is removed.`)) return;
+    await deleteFolder(id);
+    state.folders = await getFolders();
+    state.words = (await getAllWords()).map(upgradeWord);
+    state.library.folder = null;
+    renderLibrary(); toast('Folder deleted');
+    return;
+  }
+  await renameFolder(id, name);
+  state.folders = await getFolders();
+  renderLibrary(); toast('Folder renamed');
+}
+// Toggle one word's membership in a folder.
+async function toggleWordFolder(word, folderId) {
+  if (!Array.isArray(word.folders)) word.folders = [];
+  const i = word.folders.indexOf(folderId);
+  if (i >= 0) word.folders.splice(i, 1); else word.folders.push(folderId);
+  await putWord(word);
 }
 function renderLibrary() {
   const list = $('#wordList'), empty = $('#libraryEmpty');
-  const { search, filter } = state.library;
-  $('#libraryCount').textContent = `${state.words.length} word${state.words.length === 1 ? '' : 's'}`;
-  let items = [...state.words];
+  const { search, filter, folder } = state.library;
+  renderFolderRow();
+  $('#libraryCount').textContent = folder
+    ? `${folderWords(folder).length} in “${folderName(folder)}”`
+    : `${state.words.length} word${state.words.length === 1 ? '' : 's'}`;
+  let items = folder ? folderWords(folder) : [...state.words];
   if (filter === 'history') items = items.filter((w) => w.seen > 0).sort((a, b) => b.updatedAt - a.updatedAt);
   else items.sort((a, b) => b.createdAt - a.createdAt);
   if (filter === 'favorite') items = items.filter((w) => w.favorite);
@@ -294,7 +416,12 @@ function renderLibrary() {
 
   if (!state.words.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
   empty.classList.add('hidden');
-  if (!items.length) { list.innerHTML = `<div class="no-results">No matching words.</div>`; return; }
+  if (!items.length) {
+    list.innerHTML = `<div class="no-results">${folder && !search && filter === 'all'
+      ? 'This folder is empty. Open a word and tap a folder to file it here.'
+      : 'No matching words.'}</div>`;
+    return;
+  }
   list.innerHTML = items.map((w) => {
     const st = STATUS[w.status] || STATUS.new;
     return `<div class="word-item" data-id="${w.id}">
@@ -312,15 +439,14 @@ function wireDetail() { $('#detailBackdrop').addEventListener('click', closeDeta
 function openDetail(id) {
   const w = state.words.find((x) => x.id === id); if (!w) return;
   renderDetail(w, false);
-  document.body.classList.add('modal-open');
   $('#detailBackdrop').classList.remove('hidden'); $('#detailSheet').classList.remove('hidden');
   $('#detailSheet').scrollTop = 0;
+  syncModalLock();
   requestAnimationFrame(() => $('#detailSheet').classList.add('up'));
 }
 function closeDetail() {
-  document.body.classList.remove('modal-open');
   $('#detailSheet').classList.remove('up'); $('#detailBackdrop').classList.add('hidden');
-  setTimeout(() => $('#detailSheet').classList.add('hidden'), 250);
+  setTimeout(() => { $('#detailSheet').classList.add('hidden'); syncModalLock(); }, 250);
 }
 function renderDetail(w, editing) {
   const body = $('#detailBody');
@@ -339,6 +465,8 @@ function renderDetail(w, editing) {
         ${m.example ? `<div class="detail-ex">“${escapeHTML(m.example)}”</div>` : ''}</div>`).join('')
       : '<div class="detail-def" style="text-align:center;color:var(--ink-soft)">No definition yet — tap Edit to add one.</div>'}
     </div>
+    <div class="rank-label">Folders</div>
+    <div class="folder-row" id="detailFolders" style="padding-bottom:2px"></div>
     <div class="rank-label">How well do you know it?</div>
     <div class="rank-row" id="rankRow">
       <button class="rank-choice struggling ${w.status === 'struggling' ? 'active' : ''}" data-rank="struggling"><span class="rc-emoji">😖</span>Struggling</button>
@@ -349,6 +477,7 @@ function renderDetail(w, editing) {
       <button class="btn ghost" id="dEdit">Edit</button>
       <button class="btn ghost detail-del" id="dDel">Delete</button>
     </div>`;
+  renderDetailFolders(w);
   $('#dFav').addEventListener('click', async () => { w.favorite = !w.favorite; await putWord(w); $('#dFav').textContent = w.favorite ? '♥' : '♡'; if (state.view === 'library') renderLibrary(); });
   $('#dPron').addEventListener('click', () => { pronounce(w.word); $('#dPron').classList.add('playing'); setTimeout(() => $('#dPron').classList.remove('playing'), 500); });
   $$('#rankRow .rank-choice').forEach((b) => b.addEventListener('click', async () => {
@@ -364,6 +493,27 @@ function renderDetail(w, editing) {
     closeDetail(); renderLibrary(); toast('Deleted');
   });
 }
+// Folder chips inside the word detail sheet — tap to file/unfile.
+function renderDetailFolders(w) {
+  const box = $('#detailFolders'); if (!box) return;
+  const mine = w.folders || [];
+  box.innerHTML = state.folders.map((f) => `
+    <button class="folder-chip ${mine.includes(f.id) ? 'active' : ''}" data-df="${f.id}">📁 ${escapeHTML(f.name)}</button>`).join('')
+    + `<button class="folder-chip new" id="detailNewFolder">＋ New</button>`;
+  $$('#detailFolders .folder-chip[data-df]').forEach((c) => c.addEventListener('click', async () => {
+    await toggleWordFolder(w, c.dataset.df);
+    renderDetailFolders(w);
+    if (state.view === 'library') renderLibrary();
+  }));
+  $('#detailNewFolder').addEventListener('click', async () => {
+    const f = await createFolderPrompt();
+    if (!f) return;
+    await toggleWordFolder(w, f.id);
+    renderDetailFolders(w);
+    if (state.view === 'library') renderLibrary();
+  });
+}
+
 function renderDetailEdit(w) {
   const body = $('#detailBody');
   const meanings = (w.meanings && w.meanings.length) ? w.meanings : [{ partOfSpeech: '', definition: '', example: '' }];
@@ -443,15 +593,14 @@ function openTopic(id) {
   const pack = getPack(id); if (!pack) return;
   state.topicId = id;
   renderTopic(pack);
-  document.body.classList.add('modal-open');
   $('#topicBackdrop').classList.remove('hidden'); $('#topicSheet').classList.remove('hidden');
   $('#topicSheet').scrollTop = 0;
+  syncModalLock();
   requestAnimationFrame(() => $('#topicSheet').classList.add('up'));
 }
 function closeTopic() {
-  document.body.classList.remove('modal-open');
   $('#topicSheet').classList.remove('up'); $('#topicBackdrop').classList.add('hidden');
-  setTimeout(() => $('#topicSheet').classList.add('hidden'), 250);
+  setTimeout(() => { $('#topicSheet').classList.add('hidden'); syncModalLock(); }, 250);
 }
 function haveWord(text) { return state.words.some((w) => w.word.toLowerCase() === text.toLowerCase()); }
 function renderTopic(pack) {
@@ -485,8 +634,18 @@ function renderTopic(pack) {
     closeTopic(); switchView('practice'); startPlay('mc', pool);
   });
   $('#addAll').addEventListener('click', async () => {
-    let n = 0; for (const pw of pack.words) if (!haveWord(pw.word)) { await addPackWord(pw); n++; }
-    renderTopic(pack); toast(`Added ${n} word${n === 1 ? '' : 's'} to your list ✦`);
+    const toAdd = pack.words.filter((pw) => !haveWord(pw.word));
+    if (!toAdd.length) return;
+    const folderId = await openFolderPicker({
+      title: 'Add to a folder?',
+      hint: `${toAdd.length} new word${toAdd.length === 1 ? '' : 's'} from “${pack.title}”. Pick a folder, or skip to leave them unfiled.`,
+    });
+    for (const pw of toAdd) {
+      const rec = await addPackWord(pw);
+      if (folderId) { rec.folders = [folderId]; await putWord(rec); }
+    }
+    renderTopic(pack);
+    toast(`Added ${toAdd.length} word${toAdd.length === 1 ? '' : 's'}${folderId ? ` to “${folderName(folderId)}”` : ''} ✦`);
   });
   $$('#topicBody .pw-add').forEach((btn) => btn.addEventListener('click', async () => {
     const pw = pack.words[+btn.dataset.i];
@@ -674,8 +833,8 @@ function wireMenu() {
   $('#importInput').addEventListener('change', doImport);
   $('#wipeBtn').addEventListener('click', doWipe);
 }
-function openSheet() { document.body.classList.add('modal-open'); $('#sheetBackdrop').classList.remove('hidden'); $('#menuSheet').classList.remove('hidden'); requestAnimationFrame(() => $('#menuSheet').classList.add('up')); updateStorageNote(); }
-function closeSheet() { document.body.classList.remove('modal-open'); $('#menuSheet').classList.remove('up'); $('#sheetBackdrop').classList.add('hidden'); setTimeout(() => $('#menuSheet').classList.add('hidden'), 250); }
+function openSheet() { $('#sheetBackdrop').classList.remove('hidden'); $('#menuSheet').classList.remove('hidden'); syncModalLock(); requestAnimationFrame(() => $('#menuSheet').classList.add('up')); updateStorageNote(); }
+function closeSheet() { $('#menuSheet').classList.remove('up'); $('#sheetBackdrop').classList.add('hidden'); setTimeout(() => { $('#menuSheet').classList.add('hidden'); syncModalLock(); }, 250); }
 async function updateStorageNote() {
   let persisted = false; try { persisted = await navigator.storage.persisted(); } catch (_) {}
   $('#storageNote').textContent = `${state.words.length} words saved on this device` + (persisted ? ' · storage protected ✓' : '');

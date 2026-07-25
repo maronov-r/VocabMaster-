@@ -77,6 +77,12 @@
           <p class="view-sub" id="libraryCount">0 words</p>
         </div>
         <div class="search-row"><input type="search" id="searchInput" class="search-input" placeholder="Search words…" /></div>
+        <div class="folder-row" id="folderRow"></div>
+        <div class="folder-actions hidden" id="folderActions">
+          <button class="btn tiny" id="folderSwipe">🃏 Swipe these</button>
+          <button class="btn tiny" id="folderQuiz">🎯 Quiz these</button>
+          <button class="btn tiny" id="folderEdit">✎ Edit</button>
+        </div>
         <div class="filter-chips" id="filterChips">
           <button class="chip active" data-filter="all">All</button>
           <button class="chip" data-filter="favorite">♥ Saved</button>
@@ -203,6 +209,17 @@
   <!-- Topic (pack) sheet -->
   <div class="sheet-backdrop hidden" id="topicBackdrop"></div>
   <div class="sheet topic-sheet hidden" id="topicSheet"><div class="sheet-handle"></div><div id="topicBody"></div></div>
+
+  <!-- Folder picker sheet -->
+  <div class="sheet-backdrop hidden" id="pickerBackdrop"></div>
+  <div class="sheet hidden" id="pickerSheet">
+    <div class="sheet-handle"></div>
+    <h2 class="sheet-title" id="pickerTitle">Add to a folder</h2>
+    <p class="hint" id="pickerHint"></p>
+    <div id="pickerList"></div>
+    <button class="btn ghost block" id="pickerNew">＋ New folder</button>
+    <button class="btn ghost block" id="pickerSkip">Skip</button>
+  </div>
 
   <!-- Word detail sheet -->
   <div class="sheet-backdrop hidden" id="detailBackdrop"></div>

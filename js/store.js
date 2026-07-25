@@ -119,6 +119,7 @@ export function makeWord(data) {
     audio: (data.audio || '').trim(),
     status: 'new',       // new | struggling | learning | mastered
     favorite: !!data.favorite,
+    folders: Array.isArray(data.folders) ? [...data.folders] : [],
     correct: 0,          // total correct recalls
     wrong: 0,            // total misses
     streak: 0,           // consecutive correct
@@ -135,6 +136,7 @@ export function upgradeWord(w) {
     w.meanings = normalizeMeanings(w);
   }
   if (w.favorite === undefined) w.favorite = false;
+  if (!Array.isArray(w.folders)) w.folders = [];
   const primary = w.meanings[0];
   if (primary) {
     w.definition = w.definition || primary.definition;
@@ -225,6 +227,41 @@ export async function touchStreak() {
 
 export async function getActiveDays() {
   return getMeta('activeDays', []);
+}
+
+// --- Folders (tag-style: a word may belong to several) ---
+
+export async function getFolders() {
+  return getMeta('folders', []);
+}
+export async function saveFolders(folders) {
+  return setMeta('folders', folders);
+}
+export async function addFolder(name) {
+  const folders = await getFolders();
+  const folder = { id: 'f_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: name.trim(), createdAt: Date.now() };
+  folders.push(folder);
+  await saveFolders(folders);
+  return folder;
+}
+export async function renameFolder(id, name) {
+  const folders = await getFolders();
+  const f = folders.find((x) => x.id === id);
+  if (f) { f.name = name.trim(); await saveFolders(folders); }
+  return f;
+}
+// Remove a folder and strip it from every word.
+export async function deleteFolder(id) {
+  const folders = (await getFolders()).filter((f) => f.id !== id);
+  await saveFolders(folders);
+  const words = await getAllWords();
+  for (const w of words) {
+    if (Array.isArray(w.folders) && w.folders.includes(id)) {
+      w.folders = w.folders.filter((x) => x !== id);
+      await putWord(w);
+    }
+  }
+  return folders;
 }
 
 export { dayStamp };
